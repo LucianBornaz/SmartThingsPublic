@@ -161,7 +161,7 @@ def zwaveEvent(physicalgraph.zwave.commands.wakeupv2.WakeUpNotification cmd) {
 	if (device.currentValue("syncStatus") != "synced") {
 
 		parameterMap().each {
-			if (device.currentValue("syncStatus") == "force") {
+			if (state."$it.key"?.state != null && device.currentValue("syncStatus") == "force") {
 				state."$it.key".state = "notSynced"
 			}
 
@@ -390,6 +390,14 @@ def zwaveEvent(physicalgraph.zwave.commands.crc16encapv1.Crc16Encap cmd) {
 }
 
 def zwaveEvent(physicalgraph.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
+	if (cmd.commandClass == 0x6C && cmd.parameter.size >= 4) { // Supervision encapsulated Message
+		// Supervision header is 4 bytes long, two bytes dropped here are the latter two bytes of the supervision header
+		cmd.parameter = cmd.parameter.drop(2)
+		// Updated Command Class/Command now with the remaining bytes
+		cmd.commandClass = cmd.parameter[0]
+		cmd.command = cmd.parameter[1]
+		cmd.parameter = cmd.parameter.drop(2)
+	}
 	def encapsulatedCommand = cmd.encapsulatedCommand(cmdVersions())
 	if (encapsulatedCommand) {
 		logging("${device.displayName} - Parsed MultiChannelCmdEncap ${encapsulatedCommand}")
@@ -441,7 +449,7 @@ private encap(Map encapMap) {
 private encap(physicalgraph.zwave.Command cmd) {
 	if (zwaveInfo.zw.contains("s")) {
 		secEncap(cmd)
-	} else if (zwaveInfo.cc.contains("56")) {
+	} else if (zwaveInfo?.cc?.contains("56")) {
 		crcEncap(cmd)
 	} else {
 		logging("${device.displayName} - no encapsulation supported for command: $cmd", "info")
